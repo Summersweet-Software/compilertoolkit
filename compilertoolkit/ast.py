@@ -101,7 +101,7 @@ class AbstractAstNode[T: ParsingPattern](ABC, metaclass=AbstractAstNodeMeta):
     def set_parent(self, parent: Self):
         self.parent = parent
 
-    def walk[S](self, func: Callable[[Self], S]) -> list[S]:
+    def walk[S](self, func: Callable[["AbstractAstNode"], S]) -> list[S]:
         """Walk the syntax tree and run a function"""
         return [
             func(self),

@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Final, Generator, Self, Sequence, Type
+from collections.abc import MutableSequence
+from typing import TYPE_CHECKING, Any, Final, Generator, Self, Sequence, Type, overload
 
+from compilertoolkit.exceptions import ParserNotFound
 from compilertoolkit.tokens import TokenEnum, TokenType
-
 
 if TYPE_CHECKING:
     from compilertoolkit.ast import AbstractAstNode
@@ -21,7 +22,12 @@ class TokenPattern[T](ABC):
 
     @abstractmethod
     def eval(
-        self, token: TokenEnum, index: int, precedence, pattern_precedence=None, parser=None
+        self,
+        token: TokenEnum,
+        index: int,
+        precedence,
+        pattern_precedence=None,
+        parser=None,
     ) -> bool:
         pass
 
@@ -29,9 +35,15 @@ class TokenPattern[T](ABC):
         self.idx = owner._IDX
         owner._IDX += 1
 
-    def __get__(self, inst, owner) -> TokenEnum[T]:
+    @overload
+    def __get__(self, inst: "ParsingPattern", owner: Any) -> TokenEnum[T]: ...
+
+    @overload
+    def __get__(self, inst: Any, owner: Any) -> Self: ...
+
+    def __get__(self, inst: "ParsingPattern | Any", owner: Any) -> TokenEnum[T] | Self:
         if inst is None:
-            return self  # type: ignore
+            return self
         return inst._children[self.idx]
 
     def __set__(self, value, inst):
@@ -45,7 +57,12 @@ class TokenHasType(TokenPattern):
         self.typ = typ
 
     def eval(
-        self, token: TokenEnum, index: int, precedence, pattern_precedence=None, parser=None
+        self,
+        token: TokenEnum,
+        index: int,
+        precedence,
+        pattern_precedence=None,
+        parser=None,
     ) -> bool:
         return token.typ == self.typ
 
@@ -57,7 +74,12 @@ class TokenValueIsInstance(TokenPattern):
         self.typ = typ
 
     def eval(
-        self, token: TokenEnum, index: int, precedence, pattern_precedence=None, parser=None
+        self,
+        token: TokenEnum,
+        index: int,
+        precedence,
+        pattern_precedence=None,
+        parser=None,
     ) -> bool:
         return isinstance(token.typ, self.typ)
 
@@ -69,7 +91,12 @@ class TokenHasValue(TokenPattern):
         self.val = val
 
     def eval(
-        self, token: TokenEnum, index: int, precedence, pattern_precedence=None, parser=None
+        self,
+        token: TokenEnum,
+        index: int,
+        precedence,
+        pattern_precedence=None,
+        parser=None,
     ) -> bool:
         return token.value == self.val
 
@@ -77,14 +104,28 @@ class TokenHasValue(TokenPattern):
 class ParseThenCheck(TokenPattern):
     __slots__ = "node"
 
+    node: TokenPattern
+
     def __init__(self, node: TokenPattern):
         self.node = node
 
     def eval(
-        self, token: TokenEnum, index: int, precedence, pattern_precedence=None, parser=None
+        self,
+        token: TokenEnum,
+        index: int,
+        precedence,
+        pattern_precedence=None,
+        parser=None,
     ) -> bool:
+        if parser is None:
+            raise ParserNotFound()
         # TODO: verify node we are checking is fully parsed
-        return self.node.eval(parser(self.idx, pattern_precedence)[index], precedence, pattern_precedence, parser)
+        return self.node.eval(
+            parser(self.idx, pattern_precedence)[index],
+            precedence,
+            pattern_precedence,
+            parser,
+        )
 
 
 class ParsingPatternMeta(type):
@@ -120,11 +161,13 @@ class ParsingPattern(metaclass=ParsingPatternMeta):
             if isinstance(value, TokenPattern)
         }
 
-    def __init__(self, items: list[TokenEnum]):
-        self._children = items
+    def __init__(self, items: MutableSequence[TokenEnum]):
+        self._children = list(items)
 
     @classmethod
-    def eval(cls, tokens: list[TokenEnum], index: int, precedence, parser) -> bool:
+    def eval(
+        cls, tokens: MutableSequence[TokenEnum], index: int, precedence, parser
+    ) -> bool:
         if cls._PATTERN_PRECEDENCE is not None and precedence > cls._PATTERN_PRECEDENCE:
             return False
         return all(
@@ -137,18 +180,19 @@ class ParsingPattern(metaclass=ParsingPatternMeta):
 
     def set_parents(self, parent: "AbstractAstNode"):
         from compilertoolkit.ast import AbstractAstNode
+
         for child in self._children:
             if child.value is not None and isinstance(child.value, AbstractAstNode):
                 child.value.set_parent(parent)
 
 
-class Parser[T]:
+class Parser:
     __slots__ = ("rules", "eof")
 
     rules: list[Type[ParsingPattern]]
-    eof: Final[T]
+    eof: Final[TokenEnum[None]]
 
-    def __init__(self, EOF_token: T):
+    def __init__(self, EOF_token: TokenEnum[None]):
         self.rules = []
         self.eof = EOF_token
 
@@ -160,17 +204,23 @@ class Parser[T]:
         self.rules += rules
         return self
 
-    def get_tokens(self, tokens: list[TokenEnum[Any]], start: int, end: int):
+    def get_tokens(self, tokens: MutableSequence[TokenEnum[Any]], start: int, end: int):
         if start > len(tokens):
             return [self.eof] * (end - start)
-        return tokens[start: min(end, len(tokens))] + (
+        return list(tokens[start : min(end, len(tokens))]) + (
             [self.eof] * (max(end, len(tokens)) - min(end, len(tokens)))
         )
 
     def parse(
-        self, tokens: Sequence[TokenEnum[Any]], offset: int, precedence: int
+        self, _tokens: Sequence[TokenEnum[Any]], offset: int, precedence: int
     ) -> list[TokenEnum[Any]]:
         """Notice: the tokens list will be edited"""
+        # relies on editing a singular list instance-
+        #  we must not reinstantiate the list
+        if not isinstance(_tokens, list):
+            tokens = list(_tokens)
+        else:
+            tokens = _tokens
 
         def parser(n_offset, n_precedence):
             return self.parse(tokens, offset + n_offset, n_precedence)
@@ -178,7 +228,9 @@ class Parser[T]:
         for rule in self.rules:
             rule_tokens = self.get_tokens(tokens, offset, offset + len(rule._PATTERNS))
             if rule.eval(rule_tokens, offset, precedence, parser):
-                tok = rule._OWNER(rule(self.get_tokens(tokens, offset, offset + len(rule._PATTERNS))))
+                tok = rule._OWNER(
+                    rule(self.get_tokens(tokens, offset, offset + len(rule._PATTERNS)))
+                )
                 for _ in range(len(rule._PATTERNS) - 1):
                     del tokens[offset]
                 tokens[offset] = rule._TOKEN_TYPE(tok.position, tok)

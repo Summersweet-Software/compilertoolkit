@@ -28,7 +28,8 @@ class SourcePosition(NamedTuple):
     end_line: int
     """The line the token ends on"""
     end_column: int
-    """The ending index of the last character of the token on the last line of the position"""
+    """The ending index of the last character of the token \
+    on the last line of the position"""
 
     source: Source
 
@@ -110,17 +111,19 @@ class TokenEnum[T]():
         return f"{self.typ.name}({self.position}, {repr(self.value)})"
 
 
-class Lexer[T: TokenEnum](rplyLexer):
+class Lexer[T: TokenEnum]():
     """A wrapper around the rply lexer.
     Returns your custom Token types when lexing"""
 
-    __slots__ = "_TokenType"
+    __slots__ = "_TokenType", "inner_lexer"
 
     _TokenType: Type[T]
+    inner_lexer: rplyLexer
+    '''Internal rply lexer used'''
 
     def __init__(self, rules, ignore_rules, token_type):
         self._TokenType = token_type
-        super().__init__(rules, ignore_rules)
+        self.inner_lexer = rplyLexer(rules, ignore_rules)
 
     def _fix_position(
         self, source: Source, position: rplySourcePosition, value
@@ -130,6 +133,8 @@ class Lexer[T: TokenEnum](rplyLexer):
         )
 
     def _fix_token(self, source: Source, token: rplyToken) -> T:
+        if token.source_pos is None:
+            raise ValueError(token.source_pos)
         return self._TokenType(
             self._fix_position(source, token.source_pos, token.value),
             token.name,
@@ -137,7 +142,7 @@ class Lexer[T: TokenEnum](rplyLexer):
         )
 
     def lex(self, source: Source) -> list[T]:
-        output = super().lex(source.contents)
+        output = self.inner_lexer.lex(source.contents)
         return [self._fix_token(source, token) for token in output]
 
 
