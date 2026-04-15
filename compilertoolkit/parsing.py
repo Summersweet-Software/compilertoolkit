@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Final, Generator, Self, Type
+from typing import TYPE_CHECKING, Any, Final, Generator, Self, Sequence, Type
 
 from compilertoolkit.tokens import TokenEnum, TokenType
 
@@ -136,18 +136,19 @@ class ParsingPattern(metaclass=ParsingPatternMeta):
         yield from self._children
 
     def set_parents(self, parent: "AbstractAstNode"):
+        from compilertoolkit.ast import AbstractAstNode
         for child in self._children:
-            if child.value is not None and not isinstance(child.value, str):
+            if child.value is not None and isinstance(child.value, AbstractAstNode):
                 child.value.set_parent(parent)
 
 
-class Parser:
+class Parser[T]:
     __slots__ = ("rules", "eof")
 
     rules: list[Type[ParsingPattern]]
-    eof: Final[TokenEnum[None]]
+    eof: Final[T]
 
-    def __init__(self, EOF_token: TokenEnum[None]):
+    def __init__(self, EOF_token: T):
         self.rules = []
         self.eof = EOF_token
 
@@ -167,7 +168,7 @@ class Parser:
         )
 
     def parse(
-        self, tokens: list[TokenEnum[Any]], offset: int, precedence: int
+        self, tokens: Sequence[TokenEnum[Any]], offset: int, precedence: int
     ) -> list[TokenEnum[Any]]:
         """Notice: the tokens list will be edited"""
 

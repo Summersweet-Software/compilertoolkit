@@ -1,4 +1,5 @@
-from typing import NamedTuple, Type
+from typing import NamedTuple, Type, Callable
+
 from rply import LexerGenerator
 from rply.lexer import Lexer as rplyLexer
 from rply.token import Token as rplyToken
@@ -53,14 +54,20 @@ class SourcePosition(NamedTuple):
 class TokenType[S]:
     """A descriptor for a token type. Allows you to fetch a particular token"""
 
-    __slots__ = ("pattern", "owner", "name")
+    __slots__ = ("pattern", "owner", "name", "initializer")
 
     pattern: str | None
     owner: Type["TokenEnum[S]"]
     name: str
+    initializer: Callable[[str], S]
 
-    def __init__(self, /, pattern: str | None = None):
+    def __init__(self, /, pattern: str | None = None,
+                 initializer: Callable[[str], S] | None = None):
         self.pattern = pattern
+        if initializer is None:
+            self.initializer = (lambda x: x)  # type: ignore
+        else:
+            self.initializer = initializer
 
     def __set_name__(self, owner: Type["TokenEnum[S]"], name: str):
         self.owner = owner
@@ -126,7 +133,7 @@ class Lexer[T: TokenEnum](rplyLexer):
         return self._TokenType(
             self._fix_position(source, token.source_pos, token.value),
             token.name,
-            token.value,
+            token.name.initializer(token.value),
         )
 
     def lex(self, source: Source) -> list[T]:
