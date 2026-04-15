@@ -3,6 +3,10 @@ from typing import TYPE_CHECKING, Any, Self, Sequence, Union, overload, override
 from compilertoolkit.ntree import Leaf, NTree
 
 
+class PrivateImportExc(Exception):
+    pass
+
+
 class ModuleName:
     """Refer to module name, used simply for matching. Basically a speculation on a module we hope exists"""
 
@@ -27,10 +31,19 @@ class ModuleName:
         return self.name
 
 
-def has_common_parent(pkg: "Package | None", other_pkg: "Package | None") -> bool:
+def has_common_parent(
+    pkg: "Package | ModuleView | None", other_pkg: "Package | ModuleView | None"
+) -> bool:
+    if isinstance(pkg, ModuleView):
+        pkg = pkg.parent
+
+    if isinstance(other_pkg, ModuleView):
+        other_pkg = other_pkg.parent
+
     if pkg is None or other_pkg is None:
         return pkg is None and other_pkg is None
-    if pkg.identifier == other_pkg.identifier:
+
+    if pkg.identifier == other_pkg.identifier and pkg.parent == other_pkg.parent:
         return True
 
     return other_pkg.parent is not None and has_common_parent(pkg, other_pkg.parent)
@@ -74,13 +87,15 @@ class ModuleView:
 
     def matches(self, name: object) -> bool:
         """Match this node based on some input param. Useful for module name resolution"""
-        return self.mod.matches(name) and (
-            not self.mod.private
-            or (
-                isinstance(name, (ModuleView, ModuleName))
-                and has_common_parent(self.parent, name.parent)
-            )
-        )
+        if not self.mod.matches(name):
+            return False
+        if self.mod.private:
+            if isinstance(name, (ModuleView, ModuleName)) and not has_common_parent(
+                self.parent, name.parent
+            ):
+                raise PrivateImportExc(f"Module: {name} is private!")
+
+        return True
 
     def __eq__(self, other: Any) -> bool:
         return self.mod == other
@@ -90,6 +105,8 @@ class ModuleView:
 
 
 class Package(NTree[ModuleView, str]):
+    """An example of an extension of NTree"""
+
     __slots__ = "parent"
 
     parent: "Package | None"
@@ -150,10 +167,11 @@ class Package(NTree[ModuleView, str]):
         def set_leaves(self, leaves: Sequence[ModuleView | Module | Self]) -> Self: ...
 
 
+# Our global list of packages and modules we might have.
 imports = Package(
     identifier="base",
     leaves=[
-        Module("main"),
+        Module("main", private=True),
         Module("other_mod"),
         Package(
             identifier="lib",
@@ -162,12 +180,28 @@ imports = Package(
                 Module("system"),
                 Module("err"),
                 Package(
-                    identifier="ui", leaves=[Module("application"), Module("widgets")]
+                    identifier="ui",
+                    leaves=[
+                        Module("application"),
+                        Module("widgets"),
+                        Module("internal_stuff", private=True),
+                        Package(
+                            identifier="bindings",
+                            leaves=[
+                                Module("application", private=True),
+                                Module("widgets", private=True),
+                            ],
+                        ),
+                    ],
                 ),
             ],
         ),
     ],
 )
+
+
+# Setup trees to do testing against
+# ===================================
 
 trying_to_import = NTree[ModuleName, str](
     identifier="base", leaves=[ModuleName("other_mod")]
@@ -184,7 +218,8 @@ trying_to_import_partial = NTree[ModuleName, str](
         NTree(identifier="lib", leaves=[ModuleName("something_that_does_not_exist")])
     ],
 )
-
+# Test Basic overlapping
+# ========================
 print(imports.overlaps(trying_to_import))  # should be true
 print(imports.overlaps(trying_to_import_2))  # should be true
 print(imports.overlaps(trying_to_import_partial))  # should be false
@@ -192,6 +227,10 @@ print(imports.overlaps(trying_to_import_partial))  # should be false
 assert imports.overlaps(trying_to_import)
 assert imports.overlaps(trying_to_import_2)
 assert not imports.overlaps(trying_to_import_partial)
+
+
+# Test Basic intersection
+# =========================
 
 print()
 print(imports & trying_to_import)
@@ -206,7 +245,8 @@ assert (imports & trying_to_import_partial).children == [
     imports["lib"].copy().set_leaves([])
 ]
 
-
+# Test Basic combining
+# ======================
 print()
 
 trying_to_import_resolved = imports & trying_to_import
@@ -236,16 +276,75 @@ changed_tree["lib"] = (
 )
 assert (imports | trying_to_import_partial_resolved) == changed_tree
 
+# Test Basic tree indexing
+# ==========================
 print()
 
 lib_pkg = imports["lib"]
 print(lib_pkg)
 assert isinstance(lib_pkg, Package) and lib_pkg.identifier == "lib"
 
-main_mod = imports[ModuleName("main")]
-print(main_mod)
-assert isinstance(main_mod, ModuleView) and main_mod.mod.name == "main"
+# Test private imports
+# ######################
+try:
+    imports[ModuleName("main")]  # should not work
+    raise Exception("Expect an error")
+except PrivateImportExc:
+    main_mod = imports[ModuleName("main", parent=imports)]
+    print(main_mod)
+    assert isinstance(main_mod, ModuleView) and main_mod.mod.name == "main"
 
+
+# Test private (more) imports
+# ############################
+try:
+    imports["lib"]["ui"][ModuleName("internal_stuff")]  # should not work
+    raise Exception("Expect an error")
+except PrivateImportExc:
+    # Access from same pkg
+    private_mod = imports["lib"]["ui"][
+        ModuleName("internal_stuff", parent=imports["lib"]["ui"])
+    ]
+    print(private_mod)
+    assert (
+        isinstance(private_mod, ModuleView) and private_mod.mod.name == "internal_stuff"
+    )
+
+    # Access from module in same pkg
+    private_mod = imports["lib"]["ui"][
+        ModuleName("internal_stuff", parent=imports["lib"]["ui"][ModuleName("widgets")])
+    ]
+    print(private_mod)
+    assert (
+        isinstance(private_mod, ModuleView) and private_mod.mod.name == "internal_stuff"
+    )
+
+    # Access from 1 pkg further
+    private_mod = imports["lib"]["ui"][
+        ModuleName("internal_stuff", parent=imports["lib"]["ui"]["bindings"])
+    ]
+    print(private_mod)
+    assert (
+        isinstance(private_mod, ModuleView) and private_mod.mod.name == "internal_stuff"
+    )
+
+    # Access from module in 1 pkg further
+    private_mod = imports["lib"]["ui"][
+        ModuleName(
+            "internal_stuff",
+            parent=imports["lib"]["ui"]["bindings"][
+                ModuleName("application", parent=imports["lib"]["ui"]["bindings"])
+            ],
+        )
+    ]
+    print(private_mod)
+    assert (
+        isinstance(private_mod, ModuleView) and private_mod.mod.name == "internal_stuff"
+    )
+
+
+# Test Tree comparison
+# ======================
 print()
 
 assert imports != imports | trying_to_import_partial_resolved
