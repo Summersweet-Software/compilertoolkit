@@ -15,7 +15,20 @@ class Leaf(Protocol):
 
 
 class NTree[L: Leaf, I: str]():
-    """A tree structure with the ability to hold N# of "leaf" objects"""
+    """
+    NTree[L: Leaf, I: str]
+    ======
+    A tree structure with the ability to hold N# of "leaf" objects
+
+    L - The leaf type
+    I - The type of the tree indentifier
+
+    Note
+    #####
+
+    You *should* subclass this if you want to add more details or change how matching works.
+
+    """
 
     __slots__ = "children", "identifier"
 
@@ -32,48 +45,15 @@ class NTree[L: Leaf, I: str]():
             self.children = list(leaves)
         self.identifier = identifier
 
-    def add_leaf(self, leaf: L | Self) -> Self:
+    def add_leaf(self, leaf: "L | NTree[L, I]") -> Self:
+        """Append a single leaf"""
         self.children.append(leaf)
         return self
 
-    @overload
-    def __or__(self, other: "NTree[L, I]") -> Self: ...
-
-    @overload
-    def __or__(self, other: Any) -> Never: ...
-
-    def __or__(self, other: "NTree[L, I] | Any") -> Self | Never:
-        if not isinstance(other, NTree):
-            raise TypeError(other)
-
-        output = list(self.children)
-        for other_child in other.children:
-            for c, child in enumerate(output):
-                if not isinstance(other_child, NTree) or not isinstance(child, NTree):
-                    if child == other_child:
-                        break  # we had a match- this element is already in our child list
-                    continue  # no match- move to next item
-                if child.matches(other_child):
-                    output[c] = (
-                        child | other_child
-                    )  # do a combine of these trees since they are the SAME tree
-                    break
-            else:  # use no-break to detect if there were ZERO MATCHES
-                output.append(
-                    other_child
-                )  # do typical appending since this element isnt found in our own child list
-
-        return self.__class__(leaves=output, identifier=self.identifier)
-
-    def __add__(self, other: "NTree[L, I] | L") -> Self:
-        return self.__class__(
-            leaves=self.children + [other], identifier=self.identifier
-        )
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, NTree):
-            return False
-        return other.identifier == self.identifier and other.children == self.children
+    def add_leaves(self, leaves: list["L | NTree[L, I]"]) -> Self:
+        """Append a single leaf"""
+        self.children += leaves
+        return self
 
     def matches(self, name: object) -> bool:
         """Match against this node based on some input "name". Useful for package name resolution.
@@ -117,11 +97,28 @@ class NTree[L: Leaf, I: str]():
             ]
         ) == len(other_tree.children)
 
-    def __and__(self, other: "NTree | Any") -> "NTree | Never":
-        """Get overlap of trees (Useful for module/package resolution!)"""
-        if not isinstance(other, NTree):
-            raise TypeError(other)
+    def _combine(self, other: "NTree[L, I]") -> "list[L | NTree[L, I]]":
+        """combine two trees- including sub-trees by identifying intersections"""
 
+        output = list(self.children)
+        for other_child in other.children:
+            for c, child in enumerate(output):
+                if not isinstance(other_child, NTree) or not isinstance(child, NTree):
+                    if child == other_child:
+                        break  # we had a match- this element is already in our child list
+                    continue  # no match- move to next item
+                if child.matches(other_child):
+                    output[c] = (
+                        child | other_child
+                    )  # do a combine of these trees since they are the SAME tree
+                    break
+            else:  # use no-break to detect if there were ZERO MATCHES
+                output.append(
+                    other_child
+                )  # do typical appending since this element isnt found in our own child list
+        return output
+
+    def _intersect(self, other: "NTree[L, I]") -> "list[L | NTree[L, I]]":
         output = []
         for other_child in other.children:
             for child in self.children:
@@ -136,19 +133,103 @@ class NTree[L: Leaf, I: str]():
                     output.append(
                         child & other_child
                     )  # get overlap of these trees since they are the SAME tree
-
-        return self.__class__(leaves=output, identifier=self.identifier)
-
-    @overload
-    def __getitem__(self, key: I) -> "NTree[L, I]": ...
+        return output
 
     @overload
-    def __getitem__(self, key: object) -> L: ...
+    def __or__(self, other: "NTree[L, I]") -> Self: ...
+
+    @overload
+    def __or__(self, other: object) -> Never: ...
+
+    def __or__(self, other: "NTree[L, I] | object") -> Self | Never:
+        """Calculate the combined tree"""
+        if not isinstance(other, NTree):
+            raise TypeError(other)
+
+        return self.__class__(leaves=self._combine(other), identifier=self.identifier)
+
+    def __ior__(self, other: "NTree[L, I] | object"):
+        """Calculate the combined tree"""
+        if not isinstance(other, NTree):
+            raise TypeError(other)
+
+        self.children = self._combine(other)
+
+    def __add__(self, other: "NTree[L, I] | L | Sequence[NTree[L, I] | L]") -> Self:
+        if isinstance(other, Sequence):
+            return self.__class__(
+                leaves=self.children + list(other), identifier=self.identifier
+            )
+        return self.__class__(
+            leaves=self.children + [other], identifier=self.identifier
+        )
+
+    def __iadd__(self, other: "NTree[L, I] | L | Sequence[NTree[L, I] | L]"):
+        if isinstance(other, Sequence):
+            self.children = self.children + list(other)
+            return
+        self.children = self.children + [other]
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, NTree):
+            return False
+        return other.identifier == self.identifier and other.children == self.children
+
+    def __and__(self, other: "NTree | object") -> "NTree | Never":
+        """Get overlap/intersection of trees (Useful for module/package resolution!)"""
+        if not isinstance(other, NTree):
+            raise TypeError(other)
+
+        return self.__class__(leaves=self._intersect(other), identifier=self.identifier)
+
+    def __iand__(self, other: "NTree | object"):
+        """Get overlap/intersection of trees (Useful for module/package resolution!)"""
+        if not isinstance(other, NTree):
+            raise TypeError(other)
+
+        self.children = self._intersect(other)
+
+    @overload
+    def __getitem__(self, key: I) -> "NTree[L, I]":
+        """Get a tree based on a tree identifier/matching"""
+        ...
+
+    @overload
+    def __getitem__(self, key: object) -> L:
+        """Get Any leaf node based on arbitrary key (will use .matches defined in Leaf protocol)"""
+        ...
 
     def __getitem__(self, key: I | object) -> "L | NTree[L, I]":
+        """Get a subtree or leaf node based on a key: I | Any"""
         for child in self.children:
             if child.matches(key):
                 return child
+        raise KeyError(key)
+
+    @overload
+    def __setitem__(self, key: I, value: "NTree[L, I]"):
+        """Set a subtree item based on a tree identifier/matching"""
+        ...
+
+    @overload
+    def __setitem__(self, key: object, value: L):
+        """set a leaf node based on arbitrary key (will use .matches defined in Leaf protocol)"""
+        ...
+
+    def __setitem__(self, key: I | object, value: "NTree[L, I] | L"):
+        """Get a subtree or leaf node based on a key: I | Any"""
+        for c, child in enumerate(self.children):
+            if child.matches(key):
+                self.children[c] = value
+                return
+        raise KeyError(key)
+
+    def __delitem__(self, key: I | object):
+        """Deletes the *first* matching item"""
+        for c, child in enumerate(self.children):
+            if child.matches(key):
+                del self.children[c]
+                return
         raise KeyError(key)
 
     def __str__(self) -> str:
