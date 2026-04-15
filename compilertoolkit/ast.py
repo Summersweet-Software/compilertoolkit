@@ -126,7 +126,8 @@ class AbstractAstNode[T: ParsingPattern](ABC, metaclass=AbstractAstNodeMeta):
 
     @property
     def position(self):
-        return sum((token.position for token in self._tokens))
+        print([token.position for token in self._tokens])
+        return sum(token.position for token in self._tokens)
 
 
 __all__ = ["AbstractAstNode", "abstractcompilationstep", "compilationstep"]

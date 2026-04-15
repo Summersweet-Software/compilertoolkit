@@ -1,3 +1,4 @@
+from functools import cache
 from typing import NamedTuple, Type, Callable
 
 from rply import LexerGenerator
@@ -15,6 +16,25 @@ class Source:
         self.contents = contents
         self.filename = filename
         self.path = path
+
+    @property
+    @cache
+    def lines(self):
+        return self.contents.split("\n")
+
+    def __getitem__(self, key: "SourcePosition") -> list[str]:
+        """Get lines from the source file"""
+        lines = self.lines[key.line - 1 : key.end_line]
+
+        if len(lines) >= 2:
+            lines[0] = lines[0][key.column :]
+            lines[-1] = lines[-1][: key.end_column]
+
+        return (
+            lines
+            if len(lines) != 1
+            else [lines[0][key.column - 1 : key.end_column - 1]]
+        )
 
 
 class SourcePosition(NamedTuple):
@@ -62,11 +82,15 @@ class TokenType[S]:
     name: str
     initializer: Callable[[str], S]
 
-    def __init__(self, /, pattern: str | None = None,
-                 initializer: Callable[[str], S] | None = None):
+    def __init__(
+        self,
+        /,
+        pattern: str | None = None,
+        initializer: Callable[[str], S] | None = None,
+    ):
         self.pattern = pattern
         if initializer is None:
-            self.initializer = (lambda x: x)  # type: ignore
+            self.initializer = lambda x: x  # type: ignore
         else:
             self.initializer = initializer
 
@@ -78,7 +102,11 @@ class TokenType[S]:
         return self.owner(position, self, value)
 
     def __eq__(self, other):
-        return isinstance(other, TokenType) and other.owner == self.owner and self.name == other.name
+        return (
+            isinstance(other, TokenType)
+            and other.owner == self.owner
+            and self.name == other.name
+        )
 
 
 class Ignore:
@@ -119,7 +147,7 @@ class Lexer[T: TokenEnum]():
 
     _TokenType: Type[T]
     inner_lexer: rplyLexer
-    '''Internal rply lexer used'''
+    """Internal rply lexer used"""
 
     def __init__(self, rules, ignore_rules, token_type):
         self._TokenType = token_type
@@ -147,7 +175,7 @@ class Lexer[T: TokenEnum]():
 
 
 def create_lexer[T: TokenEnum](token_types: Type[T]) -> Lexer[T]:
-    '''Create a lexer using your token'''
+    """Create a lexer using your token"""
     lg = LexerGenerator()
     for attr in token_types.__dict__.values():
         if isinstance(attr, TokenType) and attr.pattern is not None:

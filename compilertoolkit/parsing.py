@@ -1,8 +1,18 @@
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
-from typing import TYPE_CHECKING, Any, Final, Generator, Self, Sequence, Type, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Final,
+    Generator,
+    Literal,
+    Self,
+    Sequence,
+    Type,
+    overload,
+)
 
-from compilertoolkit.exceptions import ParserNotFound
+from compilertoolkit.exceptions import ParserNotFound, ParsingError
 from compilertoolkit.tokens import TokenEnum, TokenType
 
 if TYPE_CHECKING:
@@ -102,12 +112,14 @@ class TokenHasValue(TokenPattern):
 
 
 class ParseThenCheck(TokenPattern):
-    __slots__ = "node"
+    __slots__ = "node", "err_on_false"
 
     node: TokenPattern
+    err_on_false: Literal[False] | str
 
-    def __init__(self, node: TokenPattern):
+    def __init__(self, node: TokenPattern, err_on_false: Literal[False] | str = False):
         self.node = node
+        self.err_on_false = err_on_false
 
     def eval(
         self,
@@ -119,13 +131,15 @@ class ParseThenCheck(TokenPattern):
     ) -> bool:
         if parser is None:
             raise ParserNotFound()
-        # TODO: verify node we are checking is fully parsed
-        return self.node.eval(
+        out = self.node.eval(
             parser(self.idx, pattern_precedence)[index],
             precedence,
             pattern_precedence,
             parser,
         )
+        if not out and self.err_on_false:
+            raise ParsingError(token.position, self.err_on_false)
+        return out
 
 
 class ParsingPatternMeta(type):
@@ -170,10 +184,20 @@ class ParsingPattern(metaclass=ParsingPatternMeta):
     ) -> bool:
         if cls._PATTERN_PRECEDENCE is not None and precedence > cls._PATTERN_PRECEDENCE:
             return False
-        return all(
-            child.eval(token, c + index, precedence, cls._PATTERN_PRECEDENCE, parser)
-            for c, (token, child) in enumerate(zip(tokens, cls._PATTERNS.values()))
-        )
+        try:
+            return all(
+                child.eval(
+                    token, c + index, precedence, cls._PATTERN_PRECEDENCE, parser
+                )
+                for c, (token, child) in enumerate(zip(tokens, cls._PATTERNS.values()))
+            )
+        except ParsingError as e:
+            position = sum(tok.position for tok in tokens)
+            if isinstance(position, int):
+                raise ValueError(position)
+
+            e.pattern_position = position
+            raise e  # added information for reraise
 
     def __iter__(self) -> Generator[TokenEnum, None, None]:
         yield from self._children
@@ -208,7 +232,7 @@ class Parser:
         if start > len(tokens):
             return [self.eof] * (end - start)
         return list(tokens[start : min(end, len(tokens))]) + (
-            [self.eof] * (max(end, len(tokens)) - min(end, len(tokens)))
+            [self.eof] * ((end - start) - (min(end, len(tokens)) - start))
         )
 
     def parse(
@@ -231,8 +255,10 @@ class Parser:
                 tok = rule._OWNER(
                     rule(self.get_tokens(tokens, offset, offset + len(rule._PATTERNS)))
                 )
+
                 for _ in range(len(rule._PATTERNS) - 1):
                     del tokens[offset]
+
                 tokens[offset] = rule._TOKEN_TYPE(tok.position, tok)
                 self.parse(tokens, offset, precedence)
                 break

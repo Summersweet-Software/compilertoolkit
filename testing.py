@@ -4,6 +4,11 @@ from compilertoolkit.ast import (
     abstractcompilationstep,
     compilationstep,
 )
+from compilertoolkit.exceptions import (
+    CompilerError,
+    create_underline,
+    format_file_position,
+)
 from compilertoolkit.parsing import ParseThenCheck, Parser, ParsingPattern, TokenHasType
 from compilertoolkit.tokens import (
     Ignore,
@@ -86,7 +91,10 @@ class SumNode(ExpressionNode):
         lhs = TokenHasType(Token.Expression)
         operation = TokenHasType(Token.Plus)
         # Parses, then checks for the specified case, errors if the value of the token is unparsed
-        rhs = ParseThenCheck(TokenHasType(Token.Expression))
+        rhs = ParseThenCheck(
+            TokenHasType(Token.Expression),
+            err_on_false="Expected expression on right hand side",
+        )
 
     # instance variables
     lhs: ExpressionNode
@@ -108,15 +116,24 @@ class SumNode(ExpressionNode):
         return self.lhs.compile(ctx) + self.rhs.compile(ctx)
 
 
-source = Source("8 + 12")
+source = Source("   8 + gaming", filename="borger.json")
 
 lexer = create_lexer(Token)
 tokens = lexer.lex(source)
 EOF = Token.EOF(SourcePosition(-1, -1, -1, -1, source), None)
-parser = Parser(EOF)
-parser.add_rule(NumberLiteral.ParserPattern).add_rule(SumNode.ParserPattern)
-parsed_tokens = parser.parse(tokens, 0, 0)
-print(parsed_tokens[0].value)
+try:
+    parser = Parser(EOF)
+    parser.add_rule(NumberLiteral.ParserPattern).add_rule(SumNode.ParserPattern)
+    parsed_tokens = parser.parse(tokens, 0, 0)
 
-parsed_tokens[0].value.analyze_types({})
-print(parsed_tokens[0].value.compile({}))
+    parsed_tokens[0].value.analyze_types({})
+except CompilerError as e:
+    print(f"""
+Error:
+| {e.msg}
+| {f"line: {format_file_position(e.positions[0])}" if e.positions[0].source.filename else ""}
+Line:
+| {e.positions[0].line-1}. {source.lines[e.positions[0].line-1]}
+| {e.positions[0].line-1}. {create_underline(source.lines[e.positions[0].line-1], e.positions, e.pattern_position)}
+""".strip(" \t"))
+    exit(1)
