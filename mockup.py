@@ -40,7 +40,7 @@ class AstNode(AbstractAstNode):
     __slots__ = ()
 
     @abstractcompilationstep(0)
-    def analyze_types(self, ctx) -> type:
+    def analyze_types(self, ctx):
         ...
 
     @abstractcompilationstep(1)
@@ -124,10 +124,13 @@ parser = Parser(EOF).\
             add_rule(NumberLiteral.ParserPattern).\
             add_rule(SumNode.ParserPattern)
 
+print(lexed_data)
+
 parsed = parser.parse(lexed_data, 0, 0)
+parsed = parser.parse(parsed, 0, 0)
 
 if len(parsed) != 1:
-    raise Exception()
+    raise Exception(parsed)
 
 
 ast = parsed[0].value

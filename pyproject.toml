@@ -50,10 +50,17 @@ Issues = "https://github.com/summersweet-software/compilertoolkit/issues"
 
 
 [dependency-groups]
-dev = ["mypy>=1.20.1", "sphinx>=9.1.0", "sphinx-autobuild>=2025.8.25"]
+dev = [
+    "black>=26.3.1",
+    "mypy>=1.20.1",
+    "sphinx>=9.1.0",
+    "sphinx-autobuild>=2025.8.25",
+]
 
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
+[tool.black]
