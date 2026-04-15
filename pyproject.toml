@@ -5,6 +5,7 @@ description = "An opinionated library to assist in building compilers"
 readme = "readme.md"
 requires-python = ">=3.12"
 dependencies = ["rply>=0.7.8"]
+packages=["compilertoolkit"]
 
 license = { text = "LGPL-3.0-only" }
 keywords = [
