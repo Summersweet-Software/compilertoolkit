@@ -135,13 +135,7 @@ class NTree[L: Leaf, I: str]():
                     )  # get overlap of these trees since they are the SAME tree
         return output
 
-    @overload
-    def __or__(self, other: "NTree[L, I]") -> Self: ...
-
-    @overload
-    def __or__(self, other: object) -> Never: ...
-
-    def __or__(self, other: "NTree[L, I] | object") -> Self | Never:
+    def __or__(self, other: "NTree[L, I]") -> "NTree[L, I]":
         """Calculate the combined tree"""
         if not isinstance(other, NTree):
             raise TypeError(other)
@@ -175,14 +169,14 @@ class NTree[L: Leaf, I: str]():
             return False
         return other.identifier == self.identifier and other.children == self.children
 
-    def __and__(self, other: "NTree | object") -> "NTree | Never":
+    def __and__(self, other: "NTree[Any, I] | object") -> "NTree[Any, I] | Never":
         """Get overlap/intersection of trees (Useful for module/package resolution!)"""
         if not isinstance(other, NTree):
             raise TypeError(other)
 
         return self.__class__(leaves=self._intersect(other), identifier=self.identifier)
 
-    def __iand__(self, other: "NTree | object"):
+    def __iand__(self, other: "NTree[Any, I] | object"):
         """Get overlap/intersection of trees (Useful for module/package resolution!)"""
         if not isinstance(other, NTree):
             raise TypeError(other)

@@ -89,9 +89,18 @@ print(imports & trying_to_import_partial)
 
 print()
 
-print(imports | trying_to_import)
-print(imports | trying_to_import_2)
-print(imports | trying_to_import_partial)
+trying_to_import_resolved = imports & trying_to_import
+
+trying_to_import_2_resolved = imports & trying_to_import_2
+
+trying_to_import_partial_resolved = NTree[Module, str](
+    identifier="base",
+    leaves=[NTree(identifier="lib", leaves=[Module("something_that_does_not_exist")])],
+)
+
+print(imports | trying_to_import_resolved)
+print(imports | trying_to_import_2_resolved)
+print(imports | trying_to_import_partial_resolved)
 
 
 print()
