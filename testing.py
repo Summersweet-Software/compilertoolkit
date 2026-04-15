@@ -1,7 +1,18 @@
 from typing import Any
-from compilertoolkit.ast import AbstractAstNode, abstractcompilationstep, compilationstep
+from compilertoolkit.ast import (
+    AbstractAstNode,
+    abstractcompilationstep,
+    compilationstep,
+)
 from compilertoolkit.parsing import ParseThenCheck, Parser, ParsingPattern, TokenHasType
-from compilertoolkit.tokens import Ignore, Source, SourcePosition, TokenEnum, TokenType, create_lexer
+from compilertoolkit.tokens import (
+    Ignore,
+    Source,
+    SourcePosition,
+    TokenEnum,
+    TokenType,
+    create_lexer,
+)
 
 
 class Token[T](TokenEnum[T]):
@@ -39,7 +50,7 @@ class ExpressionNode(AstNode):
     __slots__ = "return_type"
 
     # instance variables
-    return_type: None  # Your own type class
+    return_type: None | type  # Your own type class
 
 
 class NumberLiteral(ExpressionNode):
@@ -100,12 +111,12 @@ class SumNode(ExpressionNode):
 source = Source("8 + 12")
 
 lexer = create_lexer(Token)
-tokens: list[Token[Any]] = lexer.lex(source)
-parser = Parser(Token.EOF(SourcePosition(-1, -1, -1, -1, Source("")), None))
-parser.add_rule(NumberLiteral.ParserPattern)\
-      .add_rule(SumNode.ParserPattern)
-tokens = parser.parse(tokens, 0, 0)
-print(tokens[0].value)
+tokens = lexer.lex(source)
+EOF = Token.EOF(SourcePosition(-1, -1, -1, -1, source), None)
+parser = Parser(EOF)
+parser.add_rule(NumberLiteral.ParserPattern).add_rule(SumNode.ParserPattern)
+parsed_tokens = parser.parse(tokens, 0, 0)
+print(parsed_tokens[0].value)
 
-tokens[0].value.analyze_types({})
-print(tokens[0].value.compile({}))
+parsed_tokens[0].value.analyze_types({})
+print(parsed_tokens[0].value.compile({}))
