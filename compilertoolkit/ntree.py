@@ -32,13 +32,13 @@ class NTree[L: Leaf, I: str]():
 
     __slots__ = "children", "identifier"
 
-    children: list["L | Self"]
+    children: list[L | Self]
     identifier: I | None
     """An identifiable "name" of some kind. Useful for tree matching/comparison"""
 
     def __init__(
         self,
-        leaves: Sequence["L | Self"] | None = None,
+        leaves: Sequence[L | Self] | None = None,
         identifier: I | None = None,
     ):
         self.children = []
@@ -111,7 +111,7 @@ class NTree[L: Leaf, I: str]():
             ]
         ) == len(other_tree.children)
 
-    def _combine(self, other: "Self") -> "Sequence[L | Self]":
+    def _combine(self, other: Self) -> Sequence[L | Self]:
         """combine two trees- including sub-trees by identifying intersections"""
 
         output = list(self.children)
@@ -134,7 +134,7 @@ class NTree[L: Leaf, I: str]():
                 )  # do typical appending since this element isnt found in our own child list
         return output
 
-    def _intersect(self, other: "NTree[L, I]") -> "Sequence[L | Self]":
+    def _intersect(self, other: "NTree[L, I]") -> Sequence[L | Self]:
         output = []
         for other_child in other.children:
             for child in self.children:
@@ -151,21 +151,21 @@ class NTree[L: Leaf, I: str]():
                     )  # get overlap of these trees since they are the SAME tree
         return output
 
-    def __or__(self, other: "Self") -> "Self":
+    def __or__(self, other: Self) -> Self:
         """Calculate the combined tree"""
         if not isinstance(other, NTree):
             raise TypeError(other)
 
         return self.copy().set_leaves(self._combine(other))
 
-    def __ior__(self, other: "Self | object"):
+    def __ior__(self, other: Self | object):
         """Calculate the combined tree"""
         if not isinstance(other, self.__class__):
             raise TypeError(other)
 
         self.set_leaves(self._combine(other))
 
-    def __add__(self, other: "Self | L | Sequence[Self | L]") -> Self:
+    def __add__(self, other: Self | L | Sequence[Self | L]) -> Self:
         if isinstance(other, Sequence):
             return self.__class__(
                 leaves=self.children + list(other), identifier=self.identifier
@@ -174,7 +174,7 @@ class NTree[L: Leaf, I: str]():
             leaves=self.children + [other], identifier=self.identifier
         )
 
-    def __iadd__(self, other: "Self | L | Sequence[Self | L]"):
+    def __iadd__(self, other: Self | L | Sequence[Self | L]):
         if isinstance(other, Sequence):
             self.add_leaves(other)
             return
@@ -185,7 +185,7 @@ class NTree[L: Leaf, I: str]():
             return False
         return other.identifier == self.identifier and other.children == self.children
 
-    def __and__(self, other: "NTree[Any, I] | object") -> "Self | Never":
+    def __and__(self, other: "NTree[Any, I] | object") -> Self:
         """Get overlap/intersection of trees (Useful for module/package resolution!)"""
         if not isinstance(other, NTree):
             raise TypeError(other)
@@ -201,7 +201,7 @@ class NTree[L: Leaf, I: str]():
         self.add_leaves(self._intersect(other))
 
     @overload
-    def __getitem__(self, key: I) -> "Self":
+    def __getitem__(self, key: I) -> Self:
         """Get a tree based on a tree identifier/matching"""
         ...
 
@@ -210,7 +210,7 @@ class NTree[L: Leaf, I: str]():
         """Get Any leaf node based on arbitrary key (will use .matches defined in Leaf protocol)"""
         ...
 
-    def __getitem__(self, key: I | object) -> "L | Self":
+    def __getitem__(self, key: I | object) -> L | Self:
         """Get a subtree or leaf node based on a key: I | Any"""
         for child in self.children:
             if child.matches(key):
@@ -218,7 +218,7 @@ class NTree[L: Leaf, I: str]():
         raise KeyError(key)
 
     @overload
-    def __setitem__(self, key: I, value: "Self"):
+    def __setitem__(self, key: I, value: Self):
         """Set a subtree item based on a tree identifier/matching"""
         ...
 
@@ -227,7 +227,7 @@ class NTree[L: Leaf, I: str]():
         """set a leaf node based on arbitrary key (will use .matches defined in Leaf protocol)"""
         ...
 
-    def __setitem__(self, key: I | object, value: "Self | L"):
+    def __setitem__(self, key: I | object, value: Self | L):
         """Get a subtree or leaf node based on a key: I | Any"""
         for c, child in enumerate(self.children):
             if child.matches(key):
