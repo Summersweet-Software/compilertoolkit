@@ -15,7 +15,7 @@ An opinionated library to help you build compilers.
 - [x] Parser builder (WIP, needs to be more ergonomic)
 - [ ] Parser check functions built into patterns to allow automatic syntax error parsing.
 - [ ] Source error highlighting (fine grained highlights)
-- [ ] Package and module tree utilities
+- [x] Package and module tree utilities
 - [x] Lexing via rply library (and utilities)
 - [x] Parser token class builtin
 
