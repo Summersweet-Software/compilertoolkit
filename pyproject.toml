@@ -10,6 +10,10 @@ license = { text = "LGPL-3.0-only" }
 keywords = [
     "compilers",
     "library",
+    "framework",
+    "trees",
+    "datastructures",
+    "tree manipulation",
     "package",
     "interpreters",
     "parsers",
