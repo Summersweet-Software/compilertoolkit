@@ -8,6 +8,7 @@ from compilertoolkit.exceptions import (
     CompilerError,
     ParsingError,
     UnexpectedToken,
+    ansi_highlight_line,
     create_underline,
     format_file_position,
 )
@@ -123,13 +124,13 @@ def print_error(e: CompilerError, title: str):
 | {e.msg}
 | {f"line: {format_file_position(e.positions[0])}" if e.positions[0].source.filename else ""}
 Line:
-| {e.positions[0].line-1}. {source.lines[e.positions[0].line-1]}
+| {e.positions[0].line-1}. {ansi_highlight_line(source.lines[e.positions[0].line-1], e.positions)}
 | {e.positions[0].line-1}. {create_underline(source.lines[e.positions[0].line-1], e.positions, e.pattern_position)}
 """)
     exit(1)
 
 
-source = Source("   8 + gaming", filename="borger.json")
+source = Source("   borger 8 + gaming", filename="borger.json")
 
 lexer = create_lexer(Token)
 tokens = lexer.lex(source)

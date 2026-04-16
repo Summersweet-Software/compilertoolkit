@@ -76,6 +76,24 @@ def create_underline(
     return underline
 
 
+def ansi_highlight_line(
+    line: str, problem_pos: list[SourcePosition], highlight_color="\u001b[7m"
+) -> str:
+    """Create a ANSI highlight on a SINGLE line. Does not work on multiple lines"""
+    output: list[str] = [line[: problem_pos[0].column - 1]]
+
+    for c, pos in enumerate(problem_pos):
+        output.append(highlight_color)
+        output.append(line[pos.column - 1 : pos.end_column - 1])
+        output.append("\u001b[0m")
+        if c != len(problem_pos) - 1:
+            output.append(line[pos.end_column - 1 : problem_pos[c + 1].column - 1])
+
+    output.append(line[problem_pos[-1].end_column - 1 :])
+
+    return "".join(output)
+
+
 def format_file_position(e: SourcePosition, /):
     """Format a source position into a string that lets you click in your IDE to that specific file line/col"""
     return f"{e.source.path + "/" if e.source.path else "./"}{e.source.filename}:{e.line-1}:{e.column-1}"
