@@ -21,7 +21,9 @@ class CompilerError(Exception):
     ):
         self.msg = msg
         self.positions = positions if isinstance(positions, list) else [positions]
-        self.pattern_position = pattern_position or self.positions[0]
+        self.pattern_position = pattern_position or sum(
+            self.positions, start=self.positions[0]
+        )
         super().__init__(msg)
 
 
@@ -50,12 +52,13 @@ def create_underline(
 ) -> str:
     """Create a highlight on a SINGLE line. Does not work on multiple lines"""
     underline = " " * (pattern_pos.column - 1)
+    underline += "~" * (problem_pos[0].column - pattern_pos.column)
+
     for c, pos in enumerate(problem_pos):
-        underline += "~" * (pos.column - pattern_pos.column)
         underline += "^" * (pos.end_column - pos.column)
 
         if c < len(problem_pos) - 1:
-            underline += "~" * (pos.end_column - problem_pos[c + 1].end_column)
+            underline += "~" * (problem_pos[c + 1].column - pos.end_column)
         elif c == len(problem_pos) - 1:
             underline += "~" * (pattern_pos.end_column - pos.end_column)
 

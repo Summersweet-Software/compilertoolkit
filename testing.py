@@ -6,6 +6,7 @@ from compilertoolkit.ast import (
 )
 from compilertoolkit.exceptions import (
     CompilerError,
+    ParsingError,
     create_underline,
     format_file_position,
 )
@@ -116,7 +117,7 @@ class SumNode(ExpressionNode):
         return self.lhs.compile(ctx) + self.rhs.compile(ctx)
 
 
-source = Source("   8 + gaming", filename="borger.json")
+source = Source("   gaming 8 + gaming", filename="borger.json")
 
 lexer = create_lexer(Token)
 tokens = lexer.lex(source)
@@ -125,6 +126,15 @@ try:
     parser = Parser(EOF)
     parser.add_rule(NumberLiteral.ParserPattern).add_rule(SumNode.ParserPattern)
     parsed_tokens = parser.parse(tokens, 0, 0)
+    if any(not isinstance(tok.value, AstNode) for tok in parsed_tokens):
+        raise ParsingError(
+            [
+                tok.position
+                for tok in parsed_tokens
+                if not isinstance(tok.value, AstNode)
+            ],
+            "Unexpected Token",
+        )
 
     parsed_tokens[0].value.analyze_types({})
 except CompilerError as e:
