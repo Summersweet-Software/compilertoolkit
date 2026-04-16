@@ -12,7 +12,7 @@ from typing import (
     overload,
 )
 
-from compilertoolkit.exceptions import ParserNotFound, ParsingError
+from compilertoolkit.exceptions import ParserNotFound, ParsingError, UnexpectedToken
 from compilertoolkit.tokens import TokenEnum, TokenType
 
 if TYPE_CHECKING:
@@ -138,7 +138,7 @@ class ParseThenCheck(TokenPattern):
             parser,
         )
         if not out and self.err_on_false:
-            raise ParsingError(token.position, self.err_on_false)
+            raise UnexpectedToken(token.position, self.err_on_false)
         return out
 
 

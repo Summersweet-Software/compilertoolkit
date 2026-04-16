@@ -5,6 +5,8 @@ from compilertoolkit.tokens import SourcePosition
 
 
 class CompilerError(Exception):
+    """An error that happens during compilation. Meant to be extended into user-created errors"""
+
     positions: list[SourcePosition]
     """Positions of tokens that are CAUSING the error"""
 
@@ -30,7 +32,12 @@ class CompilerError(Exception):
 class ParsingError(CompilerError):
     """Error during the actual parsing of data"""
 
-    pass
+
+class UnexpectedToken(ParsingError):
+    """An Unexpected Token when parsing has caused an exception to be raised"""
+
+
+# =======
 
 
 class ParserError(Exception):
@@ -45,6 +52,10 @@ class ParserNotFound(ParserError):
 
     def __init__(self):
         super().__init__("Parser Not Found")
+
+
+# * Utilities
+# * ==========
 
 
 def create_underline(
